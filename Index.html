@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Fitness Tracker</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load React, ReactDOM, and Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        /* Custom styles for mobile feel and smooth scrolling */
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            background-color: #0d1117; /* Dark background */
+        }
+        #root {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, addDoc, collection, onSnapshot, serverTimestamp, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Inject the required Firebase modules into the global scope for the Babel script to use
+        window.firebase = {
+            initializeApp,
+            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut,
+            getFirestore, doc, setDoc, addDoc, collection, onSnapshot, serverTimestamp, deleteDoc, setLogLevel
+        };
+        
+        // Use a flag to ensure the React component only renders after Firebase imports are available
+        document.getElementById('root').innerHTML = '<div class="text-white text-center p-8">Loading modules...</div>';
+
+        // Once modules are loaded, load the main app script
+        const script = document.createElement('script');
+        script.type = "text/babel";
+        script.innerHTML = `
+            const { useState, useEffect, useMemo, useCallback } = React;
+            const { 
+                initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut,
+                getFirestore, doc, setDoc, addDoc, collection, onSnapshot, serverTimestamp, deleteDoc, setLogLevel
+            } = window.firebase;
+
+            // --- Icon Definitions ---
+            const DumbbellIcon = (props) => (
+                <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.4 14.4L18 18m-3.6-3.6L12 12m2.4 2.4L18 18M6 6l3.6 3.6m-3.6 3.6L6 6m7.2-7.2L6 6m3.6 3.6L18 18M18 6l-7.2 7.2M6 18l7.2-7.2M9.6 9.6l3.6 3.6m-3.6-3.6L6 6m3.6 3.6L18 18M6 18l7.2-7.2M18.8 9.2a2.3 2.3 0 0 0 0-4.4M2.3 20.9a2.3 2.3 0 0 1 0-4.4M6 12L2 22M22 2l-4 10" />
+                </svg>
+            );
+            const TargetIcon = (props) => (
+                <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="6" />
+                    <circle cx="12" cy="12" r="2" />
+                </svg>
+            );
+            const HomeIcon = (props) => (
+                <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+            );
+            const CheckCircleIcon = (props) => (
+                <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14 9 11" />
+                </svg>
+            );
+            const PlusIcon = (props) => (
+                <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+            );
+            const TrashIcon = (props) => (
+                <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                </svg>
+            );
+            const XIcon = (props) => (
+                <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                </svg>
+            );
+
+            // --- Firebase Setup and Context Hook ---
+            const useFirebaseApp = () => {
+                const [db, setDb] = useState(null);
+                const [auth, setAuth] = useState(null);
+                const [userId, setUserId] = useState(null);
+                const [isAuthReady, setIsAuthReady] = useState(false);
+
+                useEffect(() => {
+                    try {
+                        setLogLevel('debug');
+                        // Use global variables provided by the environment
+                        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+
+                        if (Object.keys(firebaseConfig).length === 0) {
+                            console.error("Firebase config is missing or invalid.");
+                            setIsAuthReady(true);
+                            return;
+                        }
+                        
+                        const app = initializeApp(firebaseConfig);
+                        const newAuth = getAuth(app);
+                        const newDb = getFirestore(app);
+
+                        setAuth(newAuth);
+                        setDb(newDb);
+
+                        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+                        const unsubscribe = onAuthStateChanged(newAuth, async (user) => {
+                            if (user) {
+                                setUserId(user.uid);
+                                setIsAuthReady(true);
+                            } else {
+                                try {
+                                    if (initialAuthToken) {
+                                        await signInWithCustomToken(newAuth, initialAuthToken);
+                                    } else {
+                                        await signInAnonymously(newAuth);
+                                    }
+                                } catch (error) {
+                                    console.error("Firebase Auth Error:", error);
+                                    setUserId(crypto.randomUUID());
+                                }
+                                setIsAuthReady(true);
+                            }
+                        });
+
+                        return () => unsubscribe();
+                    } catch (e) {
+                        console.error("Critical Firebase Initialization Error:", e);
+                        setIsAuthReady(true);
+                    }
+                }, []);
+
+                const dataPaths = useMemo(() => {
+                    if (!db || !userId) return {};
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    return {
+                        workoutsCollection: collection(db, 'artifacts', appId, 'users', userId, 'workouts'),
+                        goalsCollection: collection(db, 'artifacts', appId, 'users', userId, 'goals'),
+                    };
+                }, [db, userId]);
+
+                return { db, auth, userId, isAuthReady, dataPaths };
+            };
+
+            // --- Data Fetching Hook ---
+
+            const useFitnessData = (db, dataPaths, isAuthReady, userId) => {
+                const [workouts, setWorkouts] = useState([]);
+                const [goals, setGoals] = useState([]);
+
+                useEffect(() => {
+                    if (!isAuthReady || !db || !userId || !dataPaths.workoutsCollection) return;
+
+                    const q = dataPaths.workoutsCollection;
+
+                    const unsubscribe = onSnapshot(q, (snapshot) => {
+                        const fetchedWorkouts = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data(),
+                            date: doc.data().date?.toDate ? doc.data().date.toDate() : new Date(doc.data().date),
+                        }));
+                        fetchedWorkouts.sort((a, b) => b.date.getTime() - a.date.getTime());
+                        setWorkouts(fetchedWorkouts);
+                    }, (error) => {
+                        console.error("Error fetching workouts:", error);
+                    });
+
+                    return () => unsubscribe();
+                }, [isAuthReady, db, userId, dataPaths.workoutsCollection]);
+
+                useEffect(() => {
+                    if (!isAuthReady || !db || !userId || !dataPaths.goalsCollection) return;
+
+                    const q = dataPaths.goalsCollection;
+
+                    const unsubscribe = onSnapshot(q, (snapshot) => {
+                        const fetchedGoals = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data(),
+                        }));
+                        setGoals(fetchedGoals);
+                    }, (error) => {
+                        console.error("Error fetching goals:", error);
+                    });
+
+                    return () => unsubscribe();
+                }, [isAuthReady, db, userId, dataPaths.goalsCollection]);
+
+                return { workouts, goals };
+            };
+
+            // --- Shared Components ---
+            const LoadingSpinner = () => (
+                <div className="flex justify-center items-center p-6 text-white">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-400"></div>
+                    <p className="ml-3">Loading App & Data...</p>
+                </div>
+            );
+
+            // --- Dashboard View ---
+            const Dashboard = ({ workouts, goals }) => {
+                const totalWorkouts = workouts.length;
+                const activeGoals = goals.filter(g => !g.isComplete).length;
+                const lastWorkout = workouts.length > 0 ? workouts[0] : null;
+
+                const WorkoutCard = ({ workout }) => (
+                    <div className="bg-gray-700/50 p-4 rounded-xl shadow-lg hover:shadow-indigo-500/30 transition duration-300">
+                        <p className="text-xs text-indigo-400 mb-1">{new Date(workout.date).toLocaleDateString()}</p>
+                        <h3 className="text-lg font-semibold text-white mb-2">{workout.type} Workout</h3>
+                        {workout.type === 'Cardio' && (
+                            <p className="text-gray-300">Distance: <span className="font-bold text-indigo-300">{workout.distanceKm}</span> km</p>
+                        )}
+                        {workout.type === 'Strength' && (
+                            <p className="text-gray-300">Lift: <span className="font-bold text-indigo-300">{workout.weightKg}</span> kg x <span className="font-bold text-indigo-300">{workout.reps}</span> reps</p>
+                        )}
+                        <p className="text-gray-400 text-sm">Duration: {workout.durationMinutes} mins</p>
+                    </div>
+                );
+
+                return (
+                    <div className="p-4 space-y-6">
+                        <h1 className="text-3xl font-extrabold text-white mb-4 border-b border-indigo-800 pb-2">Your Fitness Dashboard</h1>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-indigo-600 p-4 rounded-xl shadow-md">
+                                <p className="text-sm font-medium text-indigo-200">Total Workouts</p>
+                                <p className="text-4xl font-black text-white">{totalWorkouts}</p>
+                            </div>
+                            <div className="bg-gray-700 p-4 rounded-xl shadow-md">
+                                <p className="text-sm font-medium text-gray-400">Active Goals</p>
+                                <p className="text-4xl font-black text-indigo-400">{activeGoals}</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-800 p-4 rounded-xl shadow-xl border-t-4 border-indigo-500">
+                            <h2 className="text-xl font-semibold text-white mb-3 flex items-center">
+                                <DumbbellIcon className="w-5 h-5 mr-2 text-indigo-400" />
+                                Last Session
+                            </h2>
+                            {lastWorkout ? (
+                                <WorkoutCard workout={lastWorkout} />
+                            ) : (
+                                <p className="text-gray-400">No workouts logged yet. Go log your first session!</p>
+                            )}
+                        </div>
+
+                        <div className="bg-gray-800 p-4 rounded-xl shadow-xl">
+                            <h2 className="text-xl font-semibold text-white mb-3 flex items-center">
+                                <TargetIcon className="w-5 h-5 mr-2 text-indigo-400" />
+                                Active Goals
+                            </h2>
+                            <div className="space-y-3">
+                                {goals.filter(g => !g.isComplete).length > 0 ? goals.filter(g => !g.isComplete).map((goal) => (
+                                    <div key={goal.id} className="p-3 rounded-lg flex justify-between items-center bg-gray-700 border border-gray-600">
+                                        <p className="font-medium text-white">{goal.name}</p>
+                                        <span className="text-xs text-indigo-400 px-2 py-1 bg-indigo-900 rounded-full">{goal.target}</span>
+                                    </div>
+                                )) : (
+                                    <p className="text-gray-400">All goals completed! Time to set new ones.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // --- Workout Logging View ---
+            const WorkoutLog = ({ dataPaths, isAuthReady }) => {
+                const [workoutType, setWorkoutType] = useState('Cardio');
+                const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+                const [durationMinutes, setDurationMinutes] = useState('');
+                const [distanceKm, setDistanceKm] = useState('');
+                const [weightKg, setWeightKg] = useState('');
+                const [reps, setReps] = useState('');
+                const [notes, setNotes] = useState('');
+                const [feedback, setFeedback] = useState(null);
+
+                const resetForm = () => {
+                    setDate(new Date().toISOString().slice(0, 10));
+                    setDurationMinutes('');
+                    setDistanceKm('');
+                    setWeightKg('');
+                    setReps('');
+                    setNotes('');
+                };
+
+                const handleSubmit = async (e) => {
+                    e.preventDefault();
+                    if (!isAuthReady || !dataPaths.workoutsCollection) {
+                        setFeedback({ type: 'error', message: 'App not ready. Please wait.' });
+                        return;
+                    }
+
+                    const baseData = {
+                        type: workoutType,
+                        date: new Date(date),
+                        durationMinutes: parseFloat(durationMinutes) || 0,
+                        notes,
+                        createdAt: serverTimestamp(),
+                    };
+
+                    let specificData = {};
+                    if (workoutType === 'Cardio') {
+                        specificData = { distanceKm: parseFloat(distanceKm) || 0 };
+                    } else if (workoutType === 'Strength') {
+                        specificData = { weightKg: parseFloat(weightKg) || 0, reps: parseInt(reps) || 0 };
+                    }
+
+                    try {
+                        await addDoc(dataPaths.workoutsCollection, { ...baseData, ...specificData });
+                        setFeedback({ type: 'success', message: 'Workout logged successfully!' });
+                        resetForm();
+                    } catch (error) {
+                        console.error("Error logging workout:", error);
+                        setFeedback({ type: 'error', message: 'Failed to log workout.' });
+                    } finally {
+                        setTimeout(() => setFeedback(null), 3000);
+                    }
+                };
+
+                return (
+                    <div className="p-4">
+                        <h1 className="text-3xl font-extrabold text-white mb-6">Log New Workout</h1>
+
+                        {feedback && (
+                            <div className={\`p-3 mb-4 rounded-lg text-white \${feedback.type === 'success' ? 'bg-green-600' : 'bg-red-600'}\`}>
+                                {feedback.message}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSubmit} className="space-y-4 bg-gray-800 p-6 rounded-xl shadow-xl">
+                            {/* Workout Type */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-1">Workout Type</label>
+                                <select
+                                    value={workoutType}
+                                    onChange={(e) => { setWorkoutType(e.target.value); resetForm(); }}
+                                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                                >
+                                    <option value="Cardio">Cardio (Run, Bike, Swim)</option>
+                                    <option value="Strength">Strength (Lifting)</option>
+                                    <option value="Custom">Other / Custom</option>
+                                </select>
+                            </div>
+
+                            {/* Date and Duration */}
+                            <div className="grid grid-cols-2 gap-4">
+ 
